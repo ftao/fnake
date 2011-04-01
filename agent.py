@@ -25,7 +25,9 @@ class Agent(Fnake):
         info
         来做出决策
         '''
-        choices = [(i, self.vote(i)) for i in range(0, 4)]
+
+        choices = [(i, self.vote(self.point_add(self.myself['body'][0], self.direction_delta[i])))
+                   for i in range(0,4)]
         self.log('vote', choices)
         max_v = max(choices, key = lambda x:x[1])[1]
         choices = [item for item in choices if item[1] == max_v]
@@ -33,9 +35,18 @@ class Agent(Fnake):
         self.log('go', go)
         return go[0]
 
-        
-    def vote(self, direction):
-        point = self.point_add(self.head_pos(), self.direction_delta[direction])
+
+    def vote(self, newhead):
+        score = self.score(newhead)
+        if score > -128:
+            body_score = self.open_space([newhead] + self.myself['body'][:-1])
+            self.log('body_socre', body_score)
+            return score + body_score
+        else:
+            return score
+
+
+    def score(self, point):
 
         if point in self.map['walls']:
             return -128
@@ -51,14 +62,10 @@ class Agent(Fnake):
         if point in self.info[POISON]:
             return -128 + len(self.myself['body']) - 5
 
-
         if point in self.info[FOOD]:
             return 128 
 
-        return random.randint(0, 3)
-
-    def head_pos(self):
-        return self.info['snakes'][self.me['seq']]['body'][0]
+        return 0
 
     def _myself(self):
         return self.info['snakes'][self.me['seq']]
@@ -68,7 +75,15 @@ class Agent(Fnake):
     def point_add(self, x, y):
         return [(x[0] + y[0]) % self.map['size'][0], (x[1] + y[1]) % self.map['size'][1]]
 
-
+       
+    def open_space(self, body):
+        score = 0
+        for point in body:
+            for i in range(0, 4):
+                if self.score(self.point_add(point, self.direction_delta[i])) >= 0:
+                    score += 1
+        return score                
+                    
 def main():
     agent = Agent()
     agent.cmd_map()
