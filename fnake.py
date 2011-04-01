@@ -10,6 +10,7 @@ import random
 class Fnake(object):
 
     name = 'fnake'
+    type = 'python'
 
     def __init__(self):
         self.conn = httplib.HTTPConnection("pythonvsruby.org")#"localhost:4567")
@@ -21,7 +22,7 @@ class Fnake(object):
         self.conn.request("POST", '/room/1/%s' % cmd,
                           urllib.urlencode(data))
         result = self.conn.getresponse().read()
-        self.log(result)
+#        self.log(result)
         return json.loads(result)
 
     def get(self, cmd):
@@ -38,9 +39,9 @@ class Fnake(object):
         """
         result = self.post("add",
                            dict(name = self.name,
-                                type = "python"))
+                                type = self.type))
         self.me, self.info = result[0], result[1]
-        self.log(self.info)
+#        self.log(self.info)
         return self.me, self.info
     
     def cmd_turn(self):
@@ -82,7 +83,7 @@ class Fnake(object):
         raise NotImplemented
 
     def log(self, *msg):
-        print ('[%s]:'% self.name, *msg)
+        print ('[%s-%s][%d]:'% (self.type, self.name, time.time()), *msg)
 
 def main():
     fn = Fnake()
