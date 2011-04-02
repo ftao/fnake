@@ -7,9 +7,6 @@ from dijkstra import shortestPath,Dijkstra
 import copy 
 import itertools
 
-FOOD = 'eggs'
-POISON = 'gems'
-
 def point_add(size, x, y):
     return [(x[0] + y[0]) % size[0], (x[1] + y[1]) % size[1]]
 
@@ -18,12 +15,12 @@ class Agent(Fnake):
 
     name = 'fnake-%d' % random.randint(0, 9999)
 
-    direction_delta = {
-        0 : [-1, 0],
-        1 : [0, -1],
-        2 : [1, 0],
-        3 : [0, 1],
-    }
+    direction_delta = [
+        [-1, 0],
+        [0, -1],
+        [1, 0],
+        [0, 1],
+    ]
 
     def make_decision(self):
         '''
@@ -38,7 +35,7 @@ class Agent(Fnake):
         #不能往回走
         choices = [(i, self.rank(i)) for i in range(0,4) if (current_direction + 2) %4 != i]
 
-        self.log('vote', choices)
+        self.log('ranks', choices)
         max_v = max(choices, key = lambda x:x[1])[1]
         choices = [item for item in choices if item[1] == max_v]
         self.log('mav-choices', choices)
@@ -80,16 +77,16 @@ class Agent(Fnake):
     def rank(self, move):
         '''
         在执行*move 之后的评分
-        目前,不考虑其他蛇的动作
         怎么评分:
         1. 如果死了 -128
         1. 如果没死，但是短了 -64
         1. 如果没死，没短
-           a. 控制区域大小 - This One
-           a. 如果吃到食物
-           a. 控制区域内食物数目
-           a. 控制区域内毒药数目
-           a. 距离食物的距离  - 总共的，还是就最近的?
+           a. 1000 - 到最近食物的距离
+           #a. 控制区域大小 - This One
+           #a. 如果吃到食物
+           #a. 控制区域内食物数目
+           #a. 控制区域内毒药数目
+           #a. 距离食物的距离  - 总共的，还是就最近的?
         '''
         map = self.map
         info = self.info
@@ -118,7 +115,8 @@ class Agent(Fnake):
             snake_count = len(ninfo['snakes'])
             dis = [({},{})] * snake_count
             for i in range(0, snake_count):
-                if ninfo['snakes'][i]['alive']:
+                #只考虑同类
+                if ninfo['snakes'][i]['alive'] and ninfo['snakes'][i]['type'] == info['snakes'][snake_seq]['type']:
                     head = ninfo['snakes'][i]['body'][0]
                     g = self.build_graph(map, ninfo, i)
                     D,P = Dijkstra(g, tuple(head))
@@ -318,12 +316,5 @@ if __name__=="__main__":
         type = sys.argv[1]
     else:
         type = 'pyton'
-    print('type', type)
-    if type == 'ruby':
-        FOOD = 'gems'
-        POISON = 'eggs'
-    else:
-        FOOD = 'eggs'
-        POISON = 'gems'
     main(type)
 

@@ -7,6 +7,8 @@ import json
 import time
 import random
 
+ROOM = 1
+
 class Fnake(object):
 
     name = 'fnake'
@@ -19,7 +21,7 @@ class Fnake(object):
         """
         发送命令给服务器
         """
-        self.conn.request("POST", '/room/1/%s' % cmd,
+        self.conn.request("POST", '/room/%d/%s' % (ROOM, cmd),
                           urllib.urlencode(data))
         result = self.conn.getresponse().read()
 #        self.log(result)
@@ -29,7 +31,7 @@ class Fnake(object):
         """
         获取信息
         """
-        self.conn.request("GET", '/room/1/%s' % cmd)
+        self.conn.request("GET", '/room/%d/%s' % (ROOM, cmd))
         result = self.conn.getresponse().read()
         return json.loads(result)
     
@@ -84,7 +86,8 @@ class Fnake(object):
         raise NotImplemented
 
     def log(self, *msg):
-        print ('[%s-%s][%f]:'% (self.type, self.name, time.time()), *msg)
+        pass
+        #print ('[%s-%s][%f]:'% (self.type, self.name, time.time()), *msg)
 
 def main():
     fn = Fnake()
