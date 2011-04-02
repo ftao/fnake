@@ -128,26 +128,31 @@ class Agent(Fnake):
             #food control score
             #food_dis
             food_ds = {}
-            '''
+
+            def key_func(x):
+                if x[0] == snake_seq:
+                    return x[1] + 1
+                else:
+                    return x[1]
+
+            access_area = 0
             for (i,j) in itertools.product(range(map['size'][0]), range(map['size'][1])):
-                ds = [(k, dis[k][0].get((i,j), 999999+(k-snake_seq)%snake_count)) for k in range(snake_count)]
-                #控制这个点的蛇
-                dom = min(ds, key = lambda x:x[1])
-                #如果是我
-                if dom[0] == snake_seq:
-                    #control_area += 1
-                    #如果是食物
-                    if [i,j] in ninfo[food_type]:
-                        self.log('near food', [i,j], dom[1])
-                        #food_score += 1
-                        food_ds[(i,j)] = dom[1]
-            '''
+                ds = [(k, dis[k][0].get((i,j))) for k in range(snake_count) if (i,j) in dis[k][0]]
+                if len(ds) > 0:
+                    #控制这个点的蛇
+                    dom = min(ds, key = key_func)
+                    #如果是我
+                    if dom[0] == snake_seq:
+                        control_area += 1
+                    if snake_seq in zip(*ds)[0]:
+                        access_area += 1
+                        
 
             #找到我能控制的食物及其距离
             for [i,j] in ninfo[food_type]:
                 ds = [(k, dis[k][0].get((i,j))) for k in range(snake_count) if (i,j) in dis[k][0]]
                 if len(ds) > 0:
-                    dom = min(ds, key = lambda x:x[1])
+                    dom = min(ds, key = key_func)
                     if dom[0] == snake_seq:
                         self.log('near food', [i,j], dom[1])
                         #food_score += 1
@@ -156,26 +161,20 @@ class Agent(Fnake):
             nf_score = 0
             if len(food_ds) > 0:
                 self.log('food_dis', food_ds)
-                nf_score = 99999 - min(food_ds.values())            
-                #nf_score = 99999 - reduce(lambda x,y:x*y, food_ds.values())            
+                nf_score = 1000 - min(food_ds.values())            
 
             #nearlist foood 
             #
 
             control_score =  control_area
 
-            #self.near_food, self.food_should_go = self.find_near_food()
-            #self.log('near_food', self.near_food)
- 
-            #self.log('body_socre', body_score)
-            #print newhead, self.food_should_go
-            #if newhead == self.food_should_go:
-            #    food_score = 64
-            #else:
-            #    food_score = 16
-            #food_score = self.food_score(newhead)
-            self.log('move,score,control_score,food_score,nf_score', move,score, control_score, food_score, nf_score)
-            return score + control_score + food_score + nf_score
+            self.log('move,score,access_area,control_score,food_score,nf_score', move,score, access_area,control_score, food_score, nf_score)
+
+            #如果执行这一步会导致控制区域小于我的长度，很危险!!!!
+            if access_area <=  len(snake['body']):
+                return score + -64
+            else:
+                return score + nf_score # food_score + nf_score
         else:
             self.log('it will die ', move, score)
             #这个操作会导致死亡
