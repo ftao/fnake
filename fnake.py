@@ -58,6 +58,7 @@ class Fnake(object):
                                 round = self.info["round"],
                                 direction = self.make_decision()))
         self.turn, self.info = result[0], result[1]
+        self.log('turn,info', self.turn, self.info)
 
     def cmd_map(self):
         """
@@ -83,7 +84,7 @@ class Fnake(object):
         raise NotImplemented
 
     def log(self, *msg):
-        print ('[%s-%s][%d]:'% (self.type, self.name, time.time()), *msg)
+        print ('[%s-%s][%f]:'% (self.type, self.name, time.time()), *msg)
 
 def main():
     fn = Fnake()
