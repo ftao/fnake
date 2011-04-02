@@ -7,7 +7,7 @@ import json
 import time
 import random
 
-ROOM = 1
+ROOM = 0
 
 class Fnake(object):
 
@@ -86,8 +86,7 @@ class Fnake(object):
         raise NotImplemented
 
     def log(self, *msg):
-        pass
-        #print ('[%s-%s][%f]:'% (self.type, self.name, time.time()), *msg)
+        print ('[%s-%s][%f]:'% (self.type, self.name, time.time()), *msg)
 
 def main():
     fn = Fnake()

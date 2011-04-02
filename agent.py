@@ -157,6 +157,7 @@ class Agent(Fnake):
             if len(food_ds) > 0:
                 self.log('food_dis', food_ds)
                 nf_score = 99999 - min(food_ds.values())            
+                #nf_score = 99999 - reduce(lambda x,y:x*y, food_ds.values())            
 
             #nearlist foood 
             #
