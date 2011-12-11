@@ -1,12 +1,24 @@
 #!/usr/bin/env python
 #coding=utf8
-from fnake import Fnake
 import random
 import time
-from dijkstra import shortestPath,Dijkstra
 import copy 
 import itertools
 
+DUMPED = False
+def dump_info(func):
+    def wrap(map, info, seq):
+        global DUMPED
+        if not DUMPED:
+            import pickle
+            with open('test.pickle', 'w') as f:
+                pickle.dump({'map' : map, 'info' : info, 'seq' : seq}, f)
+            DUMPED = True
+        return func(map, info, seq)
+    return wrap
+
+from fnake import Fnake
+from dijkstra import shortestPath,Dijkstra
 from ailib import cmd_run, DIRECT, SPRIT_COMMAND
 
 SPRINT_ROUND = 5 
@@ -34,7 +46,7 @@ def get_black_holes(map, info, seq):
             #for safety, add other snake's next pos to blackhole
             p = snake['body'][0]
             black_holes += [point_add(map['size'], p, direction_delta[i]) for i in range(4)]
-    return black_holes
+    return set(black_holes)
 
 def build_graph(map, info, seq):
     '''
@@ -58,9 +70,9 @@ def build_graph(map, info, seq):
     head = info['snakes'][seq]['body'][0]
 
     w,h = map['size']
-    nodes = [node for node in itertools.product(range(w), range(h)) if node not in black_holes]
-    if head not in nodes:
-        nodes.append(head)
+    nodes = set(itertools.product(range(w), range(h)))
+    nodes = nodes - black_holes
+    nodes.add(head)
     for p in nodes:
         g[p] = {}
         for i in range(0, 4):
@@ -74,6 +86,7 @@ def build_graph(map, info, seq):
 
     return g
 
+#@dump_info
 def make_decision(map, info, seq):
     '''
     根据当前的信息
@@ -117,14 +130,14 @@ def rank(map, info, seq, command):
         #for every snake , run Dijkstra algo
         for i, snake in enumerate(ninfo['snakes']):
             #只考虑同类
-            #if ninfo['snakes'][i]['alive'] and ninfo['snakes'][i]['type'] == info['snakes'][seq]['type']:
-            head = snake['body'][0]
-            g = build_graph(map, ninfo, i)
-            D,P = Dijkstra(g, head)
-            dis.append({
-                'seq' : i,
-                'd_p' : (D,P)
-            })
+            if snake['alive'] and snake['type'] == me['type']:
+                head = snake['body'][0]
+                g = build_graph(map, ninfo, i)
+                D,P = Dijkstra(g, head)
+                dis.append({
+                    'seq' : i,
+                    'd_p' : (D,P)
+                })
 
         access_area = 0
         access_food_count = 0
@@ -222,8 +235,8 @@ def base_score(map, info, seq):
 
 class Agent(Fnake):
 
-    #name = 'fnake-%d' % random.randint(0, 9999)
-    name = 'fnake'
+    name = 'fnake-%d' % random.randint(0, 9999)
+    #name = 'fnake'
 
     def make_decision(self):
         return make_decision(self.map, self.info, self.seq)
