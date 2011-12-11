@@ -7,314 +7,227 @@ from dijkstra import shortestPath,Dijkstra
 import copy 
 import itertools
 
-def point_add(size, x, y):
-    return [(x[0] + y[0]) % size[0], (x[1] + y[1]) % size[1]]
+from ailib import cmd_run, DIRECT, SPRIT_COMMAND
 
+SPRINT_ROUND = 5 
+SPRINT_STEP = 3 # sprint的时候, 每轮可以走的步数
+SPRINT_REST = 20 # sprint之后需要休息的时间
+
+direction_delta = [
+    (-1, 0),
+    (0, -1),
+    (1, 0),
+    (0, 1),
+]
+
+def point_add(size, x, y):
+    return ((x[0] + y[0]) % size[0], (x[1] + y[1]) % size[1])
+
+def get_black_holes(map, info, seq):
+    black_holes = map['walls'][:]
+    for i,snake in enumerate(info['snakes']):
+        if i == seq:
+            black_holes += snake['body'][1:]
+        else:
+            black_holes += snake['body']
+
+            #for safety, add other snake's next pos to blackhole
+            p = snake['body'][0]
+            black_holes += [point_add(map['size'], p, direction_delta[i]) for i in range(4)]
+    return black_holes
+
+def build_graph(map, info, seq):
+    '''
+    将地图和障碍物数据变成图
+    '''
+    snake = info['snakes'][seq]
+    head = snake['body'][0]
+    food_type = 'eggs' if snake['type'] == 'python' else 'gems'
+    nonfood_type = 'gems' if snake['type'] == 'python' else 'eggs'
+
+    g = {}
+    black_holes = get_black_holes(map, info, seq)
+
+    portals = map['portals']
+    portals_map = {}
+    for pindex in range(len(portals) /2):
+        pin, pout = portals[pindex * 2], portals[pindex * 2 + 1]
+        portals_map[pin] = pout
+        portals_map[pout] = pin
+ 
+    head = info['snakes'][seq]['body'][0]
+
+    w,h = map['size']
+    nodes = [node for node in itertools.product(range(w), range(h)) if node not in black_holes]
+    if head not in nodes:
+        nodes.append(head)
+    for p in nodes:
+        g[p] = {}
+        for i in range(0, 4):
+            np = point_add(map['size'], p, direction_delta[i])
+            if np not in nodes:
+                continue
+            np = portals_map.get(np, np)
+            if np not in nodes:
+                continue
+            g[p][np] = 999 if np in info[nonfood_type] else 1
+
+    return g
+
+def make_decision(map, info, seq):
+    '''
+    根据当前的信息
+    map
+    info
+    seq
+    来做出决策
+    '''
+
+    current_direction = info['snakes'][seq]['direction']
+
+    max_v = (-9999, 0, 0, 0, 0)
+    max_command = current_direction
+    for command in range(0,4):
+        v = rank(map, info, seq, command)
+        if v > max_v:
+            max_v = v
+            max_command = command
+    print max_command, max_v
+    return max_command
+
+def rank(map, info, seq, command):
+    '''
+    '''
+    seq =  seq
+    me = info['snakes'][seq]
+
+    score = 0
+    try:
+        ninfo = move(map, info, seq, command)
+        score = base_score(map, ninfo, seq)
+    except AssertionError,e:
+        score = -128
+
+    food_type = 'eggs' if me['type'] == 'python' else 'gems'
+    nonfood_type = 'gems' if me['type'] == 'python' else 'eggs'
+
+    if score > -128:
+        snake_count = len(ninfo['snakes'])
+        dis = []
+        #for every snake , run Dijkstra algo
+        for i, snake in enumerate(ninfo['snakes']):
+            #只考虑同类
+            #if ninfo['snakes'][i]['alive'] and ninfo['snakes'][i]['type'] == info['snakes'][seq]['type']:
+            head = snake['body'][0]
+            g = build_graph(map, ninfo, i)
+            D,P = Dijkstra(g, head)
+            dis.append({
+                'seq' : i,
+                'd_p' : (D,P)
+            })
+
+        access_area = 0
+        access_food_count = 0
+        access_food = {}
+
+        control_area = 0
+        control_food_count = 0
+        control_food = {}
+
+        w,h = map['size']
+
+        def distance_key_func(x):
+            if x['seq'] == seq:
+                return x['distance'] + 2
+            else:
+                return x['distance']
+
+        for point in itertools.product(range(w), range(h)):
+            reachable_snakes = []
+            for dis_item in dis:
+                distance = dis_item['d_p'][0].get(point)
+                if distance is not None:
+                    reachable_snakes.append({'seq' : dis_item['seq'], 'distance' : distance})
+            if len(reachable_snakes) > 0:
+                for item in reachable_snakes:
+                    if seq == item['seq']:
+                        access_area += 1
+                        if point in ninfo[food_type]:
+                            access_food_count += 1
+                            access_food[point] = item['distance']
+                        break
+
+                #控制这个点的蛇
+                dom = min(reachable_snakes, key=distance_key_func)
+                #如果是我
+                if dom['seq'] == seq:
+                    control_area += 1
+                    #如果该点是食物
+                    if point in ninfo[food_type]:
+                        control_food_count += 1
+                        control_food[point] = dom['distance']
+
+        cf_score = 0
+        if len(control_food) > 0:
+            cf_score = 1000 - min(control_food.values())            
+
+        af_score = 0
+        if len(access_food) > 0:
+            af_score = 1000 - min(access_food.values()) 
+
+        #如果执行这一步会导致可接触区域小于我的长度，很危险!!!!
+        if access_area <= len(snake['body']):
+            return score, -64, cf_score, af_score, control_area
+        else:
+            return score, 0, cf_score, af_score, control_area
+    else:
+        #这个操作会导致死亡
+        return score, 0, 0, 0, 0
+
+def move(map, info, seq, command):
+    '''
+    移动某一条蛇之后新世界
+    '''
+    info = copy.deepcopy(info)
+    snake = info['snakes'][seq]
+    point = point_add(map['size'], snake['body'][0], direction_delta[command])
+
+    assert point not in get_black_holes(map, info, seq)
+
+    snake['body'].pop()
+    snake['body'].insert(0, point)
+    return info
+
+def base_score(map, info, seq):
+    '''
+    基本的打分, 如果死了返回-128
+    如果吃到非食物返回 -127 - 0
+    如果吃到食物返回 128
+    否则返回0
+    '''
+
+    snake = info['snakes'][seq]
+    food_type = 'eggs' if snake['type'] == 'python' else 'gems'
+    nonfood_type = 'gems' if snake['type'] == 'python' else 'eggs'
+
+    head = snake['body'][0]
+
+    if head in info[nonfood_type]:
+        #吃到非食物
+        return -128 + len(snake['body']) - 5
+    elif head in info[food_type]:
+        return 128 
+    else:
+        return 0
 
 class Agent(Fnake):
 
-    name = 'fnake-%d' % random.randint(0, 9999)
-
-    direction_delta = [
-        [-1, 0],
-        [0, -1],
-        [1, 0],
-        [0, 1],
-    ]
+    #name = 'fnake-%d' % random.randint(0, 9999)
+    name = 'fnake'
 
     def make_decision(self):
-        '''
-        根据当前的信息
-        map
-        info
-        来做出决策
-        '''
+        return make_decision(self.map, self.info, self.seq)
 
-        current_direction = self.info['snakes'][self.me['seq']]['direction']
-
-        #不能往回走
-        choices = [(i, self.rank(i)) for i in range(0,4) if (current_direction + 2) %4 != i]
-
-        self.log('ranks', choices)
-        max_v = max(choices, key = lambda x:x[1])[1]
-        choices = [item for item in choices if item[1] == max_v]
-        self.log('mav-choices', choices)
-        go = choices[random.randint(0, len(choices) -1)]
-        self.log('go', go)
-        return go[0]
-
-    
-    def move(self, map, info, snake_seq, move):
-        '''
-        移动某一条蛇之后新世界
-        '''
-        info = copy.deepcopy(info)
-        snake = info['snakes'][snake_seq]
-        point = point_add(map['size'], snake['body'][0], self.direction_delta[move])
-
-        assert point not in map['walls']
-        for s in info['snakes']:
-            assert point not in s['body']
- 
-        snake['body'].pop()
-        snake['body'].insert(0, point)
-        return info
-
-    def near_food_dis(self):
-        map = self.map
-        info = self.info
-        snake_seq =  self.me['seq']
-        snake = info['snakes'][snake_seq]
-        head = snake['body'][0]
-
-        food_type = 'eggs' if snake['type'] == 'python' else 'gems'
-
-        g = self.build_graph(map, info, snake_seq)
-        D,P = Dijkstra(g, tuple(head))
-        return min([D.get(tuple(p), 99999) for p in info[food_type]])
-
-
-    def rank(self, move):
-        '''
-        在执行*move 之后的评分
-        怎么评分:
-        1. 如果死了 -128
-        1. 如果没死，但是短了 -64
-        1. 如果没死，没短
-           a. 1000 - 到最近食物的距离
-           #a. 控制区域大小 - This One
-           #a. 如果吃到食物
-           #a. 控制区域内食物数目
-           #a. 控制区域内毒药数目
-           #a. 距离食物的距离  - 总共的，还是就最近的?
-        '''
-        map = self.map
-        info = self.info
-        snake_seq =  self.me['seq']
-        snake = info['snakes'][snake_seq]
-
-        try:
-            ninfo = self.move(map, info, snake_seq, move)
-        except AssertionError,e:
-            print e
-            self.log('illegal move ', move)
-            return -128
-
-        score = self.score(map, ninfo, snake_seq)
-
-        food_type = 'eggs' if snake['type'] == 'python' else 'gems'
-        nonfood_type = 'gems' if snake['type'] == 'python' else 'eggs'
-
-
-        if score > -128:
-        #if True
-            #body_score = self.open_space([newhead] + self.myself['body'][:-1])
-            #the new world
-
-            #build the graphy
-            snake_count = len(ninfo['snakes'])
-            dis = [({},{})] * snake_count
-            for i in range(0, snake_count):
-                #只考虑同类
-                if ninfo['snakes'][i]['alive'] and ninfo['snakes'][i]['type'] == info['snakes'][snake_seq]['type']:
-                    head = ninfo['snakes'][i]['body'][0]
-                    g = self.build_graph(map, ninfo, i)
-                    D,P = Dijkstra(g, tuple(head))
-                    dis[i] = (D,P)
-
-            control_area = 0
-            food_score = 0
-
-            #food control score
-            #food_dis
-            food_ds = {}
-
-            def key_func(x):
-                if x[0] == snake_seq:
-                    return x[1] + 1
-                else:
-                    return x[1]
-
-            access_area = 0
-            for (i,j) in itertools.product(range(map['size'][0]), range(map['size'][1])):
-                ds = [(k, dis[k][0].get((i,j))) for k in range(snake_count) if (i,j) in dis[k][0]]
-                if len(ds) > 0:
-                    #控制这个点的蛇
-                    dom = min(ds, key = key_func)
-                    #如果是我
-                    if dom[0] == snake_seq:
-                        control_area += 1
-                    if snake_seq in zip(*ds)[0]:
-                        access_area += 1
-                        
-
-            #找到我能控制的食物及其距离
-            for [i,j] in ninfo[food_type]:
-                ds = [(k, dis[k][0].get((i,j))) for k in range(snake_count) if (i,j) in dis[k][0]]
-                if len(ds) > 0:
-                    dom = min(ds, key = key_func)
-                    if dom[0] == snake_seq:
-                        self.log('near food', [i,j], dom[1])
-                        #food_score += 1
-                        food_ds[(i,j)] = dom[1]
-
-            nf_score = 0
-            if len(food_ds) > 0:
-                self.log('food_dis', food_ds)
-                nf_score = 1000 - min(food_ds.values())            
-
-            #nearlist foood 
-            #
-
-            control_score =  control_area
-
-            self.log('move,score,access_area,control_score,food_score,nf_score', move,score, access_area,control_score, food_score, nf_score)
-
-            #如果执行这一步会导致控制区域小于我的长度，很危险!!!!
-            if access_area <=  len(snake['body']):
-                return score + -64
-            else:
-                return score + nf_score # food_score + nf_score
-        else:
-            self.log('it will die ', move, score)
-            #这个操作会导致死亡
-            return score
-
-
-    def score(self, map, info, snake_seq):
-        '''
-        基本的打分, 如果死了返回-128
-        如果吃到非食物返回 0 - -127
-        如果吃到食物返回 128
-        否则返回0
-        '''
-
-        snake = info['snakes'][snake_seq]
-        food_type = 'eggs' if snake['type'] == 'python' else 'gems'
-        nonfood_type = 'gems' if snake['type'] == 'python' else 'eggs'
-
-        head = snake['body'][0]
-
-        if head in map['walls']:
-            #碰到墙
-            return -128
-
-        for i,snake in enumerate(info['snakes']):
-            if i == snake_seq:
-                #碰到自己
-                if head in snake['body'][1:]:
-                    return -128
-            else:
-                #碰到别人
-                if head in snake['body']:
-                    return -128
-
-        if head in info[nonfood_type]:
-            #吃到非食物导致死亡
-            return -128 + len(snake['body']) - 5
-
-        if head in info[food_type]:
-            return 128 
-
-        return 0
-
-    def _myself(self):
-        return self.info['snakes'][self.me['seq']]
-
-    myself = property(_myself)
-
-    def open_space(self, body):
-        score = 0
-        for point in body:
-            for i in range(0, 4):
-                if self.score(self.point_add(point, self.direction_delta[i])) >= 0:
-                    score += 1
-        return score                
-                    
-    def shortest_path(self, g, pa, pb):
-        '''
-        从pa 到 pb 需要的步数和下一步应该去的地方
-        '''
-        pa = tuple(pa)
-        pb = tuple(pb)
-        try:
-            path = shortestPath(g, pa, pb)
-            #self.log('===========path',  path)
-            return [len(path), list(path[1])]
-        except Exception,e:
-            self.log('.....exception',  e)
-            return [99999, None]
-
-    def find_near_food(self, newhead):
-        '''最近的食物
-        food_point, length, newpoint
-        '''
-        g = self.build_graph(newhead)
-        self.log('------newhead is ', newhead)
-        dis = [[point] + self.shortest_path(g, head, point)  for point in self.info[FOOD]]
-        if len(dis) > 0:
-            near_food = min(dis, key = lambda x:x[1])
-            return near_food
-        else:
-            return None,None,None
-
-    def build_graph(self, map, info, snake_seq):
-        '''
-        将地图和障碍物数据变成图
-        '''
-        snake = info['snakes'][snake_seq]
-        food_type = 'eggs' if snake['type'] == 'python' else 'gems'
-        nonfood_type = 'gems' if snake['type'] == 'python' else 'eggs'
-
-        g = {}
-
-        black_holes = map['walls'][:]
-        head = info['snakes'][snake_seq]['body'][0]
-
-        for i,snake in enumerate(info['snakes']):
-            if i == snake_seq:
-                black_holes += snake['body'][1:]
-            else:
-                black_holes += snake['body']
-
-        #ignore non-food 
-        #if len(snake['body']) <= 5:
-        #    black_holes += info[nonfood_type]
-
-        for x in range(map['size'][0]):
-            for y in range(map['size'][1]):
-                p = [x,y]
-                if p not in black_holes:
-                    g[tuple(p)] = {}
-                    for i in range(0, 4):
-                        np = point_add(map['size'], p, self.direction_delta[i])
-                        if np not in black_holes:
-                            if np in info[nonfood_type]:
-                                g[tuple(p)][tuple(np)] = 999
-                            else:
-                                g[tuple(p)][tuple(np)] = 1
-                        
-        return g
-        #self.log(g)
-
-        
-def main(type):
-    agent = Agent()
-    agent.type = type
-    agent.cmd_map()
-    agent.log(agent.map['size'])
-    agent.cmd_add()
-    while True:
-        time.sleep(0.2)
-        agent.log('start new turn')
-        agent.cmd_turn()
-        agent.log('end turn')
-    
 if __name__=="__main__":
-    import sys
-    if len(sys.argv) > 1:
-        type = sys.argv[1]
-    else:
-        type = 'pyton'
-    main(type)
+    cmd_run(Agent)
 
