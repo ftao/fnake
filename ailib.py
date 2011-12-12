@@ -162,12 +162,14 @@ def run_ai(ai, controller):
     ai.status = NEED_ADDING
     
     while True:
+        logging.debug('start turn')
         time.sleep(0.01)
         # 先获取场上的情况
         if False:#ai.status == NEED_ADDING:
             info = c.info()
         else:
             info = c.sub_info()
+        logging.debug('get info done ')
 
         # found me
         names = [s['name'] for s in info['snakes']]

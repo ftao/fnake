@@ -4,6 +4,7 @@ import random
 import time
 import copy 
 import itertools
+import logging
 
 DUMPED = False
 def dump_info(func):
@@ -105,7 +106,7 @@ def make_decision(map, info, seq):
         if v > max_v:
             max_v = v
             max_command = command
-    print max_command, max_v
+    logging.debug('decision %s %s' %(max_command, max_v))
     return max_command
 
 def rank(map, info, seq, command):
