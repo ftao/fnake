@@ -18,7 +18,7 @@ def dump_info(func):
         return func(map, info, seq)
     return wrap
 
-from fnake import Fnake
+from fnake import Fnake, run_ai
 from dijkstra import shortestPath,Dijkstra
 from ailib import cmd_run, DIRECT, SPRIT_COMMAND
 
@@ -243,5 +243,8 @@ class Agent(Fnake):
         return make_decision(self.map, self.info, self.seq)
 
 if __name__=="__main__":
-    cmd_run(Agent)
+    ROOM = 0
+    ai = Agent()
+    run_ai(ai, ROOM)
+    #cmd_run(Agent)
 
