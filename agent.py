@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 #coding=utf8
+import sys
 import random
 import time
 import copy 
@@ -39,14 +40,7 @@ def point_add(size, x, y):
 def get_black_holes(map, info, seq):
     black_holes = map['walls'][:]
     for i,snake in enumerate(info['snakes']):
-        if i == seq:
-            black_holes += snake['body'][1:]
-        else:
-            black_holes += snake['body']
-
-            #for safety, add other snake's next pos to blackhole
-            p = snake['body'][0]
-            black_holes += [point_add(map['size'], p, direction_delta[i]) for i in range(4)]
+        black_holes += snake['body']
     return set(black_holes)
 
 def build_graph(map, info, seq):
@@ -65,25 +59,36 @@ def build_graph(map, info, seq):
     portals_map = {}
     for pindex in range(len(portals) /2):
         pin, pout = portals[pindex * 2], portals[pindex * 2 + 1]
+        #如果传送门被死蛇占据了位置
+        if pin in black_holes or pout in black_holes:
+            if pin not in black_holes:
+                black_holes.add(pin)
+            if pout not in black_holes:
+                black_holes.add(pout)
+            continue
         portals_map[pin] = pout
         portals_map[pout] = pin
  
-    head = info['snakes'][seq]['body'][0]
 
     w,h = map['size']
     nodes = set(itertools.product(range(w), range(h)))
     nodes = nodes - black_holes
-    nodes.add(head)
+    for snake in info['snakes']:
+        head = snake['body'][0]
+        nodes.add(head)
     for p in nodes:
         g[p] = {}
-        for i in range(0, 4):
-            np = point_add(map['size'], p, direction_delta[i])
-            if np not in nodes:
-                continue
-            np = portals_map.get(np, np)
-            if np not in nodes:
-                continue
-            g[p][np] = 999 if np in info[nonfood_type] else 1
+        if p in portals_map:
+            np = portals_map[p]
+            if np in nodes:
+                g[p][np] = 0
+        else:
+            for i in range(0, 4):
+                np = point_add(map['size'], p, direction_delta[i])
+                if np not in nodes:
+                    continue
+                g[p][np] = 999 if np in info[nonfood_type] else 1
+                #g[p][np] = 1
 
     return g
 
@@ -103,10 +108,11 @@ def make_decision(map, info, seq):
     max_command = current_direction
     for command in range(0,4):
         v = rank(map, info, seq, command)
+        logging.info("%s %s", command, v)
         if v > max_v:
             max_v = v
             max_command = command
-    logging.debug('decision %s %s' %(max_command, max_v))
+    logging.info('decision %s %s' %(max_command, max_v))
     return max_command
 
 def rank(map, info, seq, command):
@@ -131,7 +137,7 @@ def rank(map, info, seq, command):
         #for every snake , run Dijkstra algo
         for i, snake in enumerate(ninfo['snakes']):
             #只考虑同类
-            if snake['alive'] and snake['type'] == me['type']:
+            if snake['alive']:# and snake['type'] == me['type']:
                 head = snake['body'][0]
                 g = build_graph(map, ninfo, i)
                 D,P = Dijkstra(g, head)
@@ -243,8 +249,9 @@ class Agent(Fnake):
         return make_decision(self.map, self.info, self.seq)
 
 if __name__=="__main__":
-    ROOM = 0
-    ai = Agent()
-    run_ai(ai, ROOM)
-    #cmd_run(Agent)
+    if sys.argv[1] == 'ws':
+        ai = Agent()
+        run_ai(ai, int(sys.argv[2]))
+    else:
+        cmd_run(Agent)
 

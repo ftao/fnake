@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 #coding=utf-8
 import logging
-import httplib
-import urllib
+import sys
 import json
 import time
-import random
+import traceback
 
 from ailib import BaseAI,SPRIT_COMMAND
 NEED_ADDING, RUNNING = 0, 1
+NO_OP = 'noop'
 
 class Fnake(BaseAI):
 
@@ -21,6 +21,10 @@ class Fnake(BaseAI):
         self.map = gmap
 
     def step(self, info):
+        if not hasattr(self, 'map'):
+            logging.warn('no map yet')
+            return NO_OP
+
         info['eggs'] = map(tuple, info['eggs'])
         info['gems'] = map(tuple, info['gems'])
         for snake in info['snakes']:
@@ -43,7 +47,7 @@ class Fnake(BaseAI):
         raise NotImplemented
 
     def log(self, *msg):
-        logging.debug("[%s-%s]" + " %s" * len(msg), self.name, self.type, *msg)
+        logging.info("[%s-%s]" + " %s" * len(msg), self.name, self.type, *msg)
 
 
 class WebSocketController():
@@ -60,7 +64,7 @@ class WebSocketController():
         发送命令给服务器
         """
         if not self.ws:
-            logging.debug('ws not connected')
+            logging.warn('ws not connected')
             return 
                 
         data['op'] = cmd
@@ -99,6 +103,7 @@ import websocket
 
 def run_ai(ai, room):
     addr = 'game.snakechallenge.org:9999/info'
+    #addr = 'blog.ftao.org:9999/info'
 
     controller = WebSocketController(room=room)
 
@@ -123,6 +128,7 @@ def run_ai(ai, room):
             if ai.status == NEED_ADDING:
                 # if already added, not add again
                 if me:
+                    logging.warn(ai.name+' already added.')
                     return
                 else:
                     controller.add(ai.name, ai.type)
@@ -131,14 +137,21 @@ def run_ai(ai, room):
 
                 # 如果自己死掉了, 那就不发出操作
                 if not me['alive']:
-                    logging.debug(ai.name+' is dead.')
+                    logging.warn(ai.name+' is dead.')
+                    sys.exit(1)
                     ai.status = NEED_ADDING            
                 else:
-                    step = ai.step(data)
-                    if step == SPRIT_COMMAND:
-                        controller.sprit()
-                    else:
-                        controller.turn(step)
+                    try:
+                        step = ai.step(data)
+                        if step == NO_OP:
+                            pass
+                        elif step == SPRIT_COMMAND:
+                            controller.sprit()
+                        else:
+                            controller.turn(step)
+                        logging.info("turn: %s in round: %d", step, data['round'])
+                    except Exception,e:
+                        logging.error(traceback.format_exc(e))
         elif op == 'add':
             controller.me = data
             ai.seq = data['seq']
@@ -147,10 +160,10 @@ def run_ai(ai, room):
         elif op == 'map':
             ai.setmap(data)
         elif data['status'] != 'ok':
-            logging.error(data)
+            logging.error('api call error %s' %data)
 
     def on_error(ws, exc):
-        logging.error(exc)
+        logging.error('ws error : %s ' %exc)
 
     def on_close(ws):
         logging.error('ws closed')
