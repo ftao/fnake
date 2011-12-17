@@ -10,7 +10,7 @@ import traceback
 import time, logging, json, random, uuid, datetime
 from datetime import date
 
-logging.basicConfig(level=logging.INFO,
+logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
 # 方向对应修改的坐标

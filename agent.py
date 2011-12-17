@@ -39,6 +39,18 @@ direction_delta = [
 def point_add(size, x, y):
     return ((x[0] + y[0]) % size[0], (x[1] + y[1]) % size[1])
 
+def is_near(size, x, y):
+    for d,d_info in enumerate(DIRECT):
+        if point_add(size, x, d_info) == y:
+            return True
+    return False
+
+def get_direction(size, x, y):
+    for d,d_info in enumerate(DIRECT):
+        if point_add(size, x, d_info) == y:
+            return True
+    return False
+
 
 def get_black_holes(map, info):
     black_holes = map['walls'][:]
@@ -258,16 +270,17 @@ def make_decision(map, info, seq):
 
     if len(rank) > 0:
         go = max(rank.items(), key=key_func)
-        
-        logging.info('go ' +  str(go))
-
         next = go[0]
-
-        if next in portals_map:
-            next = portals_map[next]
+        logging.info('go ' +  str(go))
         for d, d_info in enumerate(DIRECT):
-            if point_add(map['size'], my_head, d_info) == next:
+            pos = point_add(map['size'], my_head, d_info)
+            if pos == next:
                 return d
+            elif pos in portals_map:
+                pos = portals_map[pos]
+                if is_near(map['size'], pos, next):
+                    return d
+        logging.error('fail to calculate dir')
     else:
         logging.warn("no way to go")
         return me['direction']
