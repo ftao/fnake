@@ -15,7 +15,7 @@ def dump_info(func):
         global DUMPED
         if not DUMPED:
             import pickle
-            with open('test.pickle', 'w') as f:
+            with open('test.ruby.pickle', 'w') as f:
                 pickle.dump({'map' : map, 'info' : info, 'seq' : seq}, f)
             DUMPED = True
         return func(map, info, seq)
@@ -48,9 +48,7 @@ def is_near(size, x, y):
 def get_direction(size, x, y):
     for d,d_info in enumerate(DIRECT):
         if point_add(size, x, d_info) == y:
-            return True
-    return False
-
+            return d
 
 def get_black_holes(map, info):
     black_holes = map['walls'][:]
@@ -108,15 +106,15 @@ def apply_portals(g, portals_map):
         A,C A,D A,E = 1
         B,X B,Y B,Z = 1
         After:
-        A,Z A,Y A,Z = 2
-        B,C B,D B,E = 2
+        A,Z A,Y A,Z = 1
+        B,C B,D B,E = 1
     '''
     for fnode, tnode in portals_map.items():
         g[fnode],g[tnode] = g[tnode],g[fnode]
         for node in g[fnode]:
-            g[fnode][node] = g[fnode][node] + 1
+            g[fnode][node] = g[fnode][node] 
         for node in g[tnode]:
-            g[tnode][node] = g[tnode][node] + 1
+            g[tnode][node] = g[tnode][node]
         if fnode in g[tnode]:
             del g[tnode][fnode]
         if tnode in g[fnode]:
@@ -137,12 +135,20 @@ def change_distance(g, node, distance):
             g[node][lnode] = distance
     return g
         
+def apply_noturn_back(g, head, size, direction):
+    for node in g[head]:
+        dir = get_direction(size, head, node)
+        if abs(dir-direction) == 2:
+            del g[head][node]
+            del g[node][head]
+            break
+
 def build_per_snake_graph(map, info, seq, g, portals_map):
     g = copy.deepcopy(g)
-    snake = info['snakes'][seq]
-    head = snake['body'][0]
-    food_type = 'eggs' if snake['type'] == 'python' else 'gems'
-    nonfood_type = 'gems' if snake['type'] == 'python' else 'eggs'
+    me = info['snakes'][seq]
+    head = me['body'][0]
+    food_type = 'eggs' if me['type'] == 'python' else 'gems'
+    nonfood_type = 'gems' if me['type'] == 'python' else 'eggs'
 
     #remove other snake's head , as we can't go there
     for snake_seq,snake in enumerate(info['snakes']):
@@ -155,7 +161,23 @@ def build_per_snake_graph(map, info, seq, g, portals_map):
 
     apply_portals(g, portals_map)
 
+    apply_noturn_back(g, head, map['size'], me['direction'])
+
     return g
+
+def next_move_access_area(g, map, snake):
+    if not snake['alive'] or snake['sprint'] < 0:
+        return set()
+    area = set()
+    head = snake['body'][0]
+    for directon in range(0, 4):
+        if abs(directon - snake['direction']) != 2:
+            node = head
+            for _ in range(0, SPRINT_STEP):
+                node = point_add(map['size'], node, DIRECT[directon])
+                if node in g:
+                    area.add(node)
+    return area   
 
 def access_length(g, node, can_not_go=[]):
     '''
@@ -188,6 +210,7 @@ def make_decision(map, info, seq):
 
     g, nodes, portals_map = build_base_graph(map, info)
     snake_gs = {}
+    danger_zone = set()
     for snake_seq,snake in enumerate(info['snakes']):
         if snake['alive']:
             snake_head = snake['body'][0]
@@ -200,6 +223,8 @@ def make_decision(map, info, seq):
                 'D' : D,
                 'P' : P
             }
+            if snake_seq != seq:
+                danger_zone = danger_zone.union(next_move_access_area(snake_g, map, snake))
     
     #all data is ready 
 
@@ -215,6 +240,7 @@ def make_decision(map, info, seq):
     for nextnode in my_g[my_head]:
         al = access_length(my_g, nextnode, [my_head])
         rank[nextnode] = {
+            'safe_next_move' : nextnode not in danger_zone,
             'free_space' : al, 'safe' : al >= len(me['body']),
             'control_food' : 0, 'control_food_min_dis' : 999999,
             'access_food' : 0, 'access_food_min_dis' : 999999
@@ -240,9 +266,10 @@ def make_decision(map, info, seq):
                     access_food_count += 1
                     access_food[node] = item
 
-        dom = min(reachable_snakes, key=lambda x:x['distance'])
-        if dom['seq'] == seq:
-            control_food[node] = dom
+        if len(reachable_snakes) > 0:
+            dom = min(reachable_snakes, key=lambda x:x['distance'])
+            if dom['seq'] == seq:
+                control_food[node] = dom
 
     for food, meta in control_food.items():
         nextnode = meta['next']
@@ -259,11 +286,11 @@ def make_decision(map, info, seq):
     def key_func(choice):
         node, meta = choice
         key = None
-        if meta['safe']:
-            key =  (1, meta['control_food'] > 0, -meta['control_food_min_dis'], 
+        if meta['safe_next_move'] and meta['safe']:
+            key =  (True, True, meta['control_food'] > 0, -meta['control_food_min_dis'], 
                     meta['access_food'] > 0, -meta['access_food_min_dis'], meta['free_space'])
         else:
-            key =  (0, meta['free_space'], 0, 0, 0, 0)
+            key =  (meta['safe_next_move'], meta['safe'], meta['free_space'], 0, 0, 0, 0)
         
         meta['_key'] = key
         return key
@@ -288,6 +315,7 @@ def make_decision(map, info, seq):
 class Agent(Fnake):
 
     name = 'fnake-%d' % random.randint(0, 9999)
+    type = 'ruby'
     #name = 'fnake'
 
     def make_decision(self):

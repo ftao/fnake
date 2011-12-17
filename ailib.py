@@ -13,6 +13,13 @@ from datetime import date
 logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
+DUMP_FILE_SUFFIX = int(time.time())%3600
+def dump_info(map, info, name, filename='dump'):
+    import pickle
+    with open(filename + '-' + str(DUMP_FILE_SUFFIX) + '.pickle', 'w') as f:
+        pickle.dump({'map' : map, 'info' : info, 'name' : name}, f)
+
+
 # 方向对应修改的坐标
 DIRECT = (
     (-1, 0), (0, -1), (1, 0), (0, 1)
@@ -212,6 +219,8 @@ def run_ai(ai, controller):
         # 如果自己死掉了, 那就不发出操作
         if not me['alive']:
             logging.debug(ai.name+' is dead.')
+            dump_info(ai.map, info, me['name'], 'dead')
+            sys.exit(1)
             ai.status = NEED_ADDING            
             # print "not alive"
             continue
@@ -219,6 +228,7 @@ def run_ai(ai, controller):
         # 发出操作
         try:
             d = ai.step(info)
+            dump_info(ai.map, info, me['name'], 'live')
         except Exception as e: 
             logging.error(traceback.format_exc(e))
             ai.status == NEED_ADDING
