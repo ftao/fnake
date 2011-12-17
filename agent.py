@@ -99,26 +99,42 @@ def build_base_graph(map, info):
                 g[p][np] = 1
     return g, nodes, portals_map
 
-def apply_portals(g, portals_map):
+def apply_portals(g, portals_map, map):
     '''
         Before:
         A,B is portal pair
         A,C A,D A,E = 1
         B,X B,Y B,Z = 1
         After:
-        A,Z A,Y A,Z = 1
-        B,C B,D B,E = 1
+        A,Z A,Y A,Z = 2 
+        B,C B,D B,E = 2
     '''
     for fnode, tnode in portals_map.items():
-        g[fnode],g[tnode] = g[tnode],g[fnode]
-        for node in g[fnode]:
-            g[fnode][node] = g[fnode][node] 
-        for node in g[tnode]:
-            g[tnode][node] = g[tnode][node]
-        if fnode in g[tnode]:
-            del g[tnode][fnode]
-        if tnode in g[fnode]:
-            del g[fnode][tnode]
+        if fnode not in g or tnode not in g:
+            continue
+            
+        fl_nodes = g[fnode]
+        tl_nodes = g[tnode]
+
+        meta = g.get('portal_meta', {})
+
+        for fn in fl_nodes:
+            for tn in tl_nodes:
+                if abs(get_direction(map['size'], fn, fnode)-get_direction(map['size'], tnode, tn)) != 2:
+                    g[fn][tn] = g[fn][fnode] + g[tnode][tn]
+                    g[tn][fn] = g[tn][tnode] + g[fnode][fn]
+                    meta[(fn, tn)] = fnode
+                    meta[(tn, fn)] = tnode
+                
+        for fn in fl_nodes:
+            del g[fn][fnode]
+        for tn in tl_nodes:
+            del g[tn][tnode]
+        del g[fnode]
+        del g[tnode]
+
+        g['portal_meta'] = meta
+
     return g
     
 def remove_node(g, node):
@@ -138,6 +154,9 @@ def change_distance(g, node, distance):
 def apply_noturn_back(g, head, size, direction):
     for node in g[head]:
         dir = get_direction(size, head, node)
+        #go by portal
+        if not dir:
+            continue
         if abs(dir-direction) == 2:
             del g[head][node]
             del g[node][head]
@@ -159,7 +178,7 @@ def build_per_snake_graph(map, info, seq, g, portals_map):
     for node in info[nonfood_type]:
         change_distance(g, node, 999)
 
-    apply_portals(g, portals_map)
+    apply_portals(g, portals_map, map)
 
     apply_noturn_back(g, head, map['size'], me['direction'])
 
@@ -304,9 +323,12 @@ def make_decision(map, info, seq):
             if pos == next:
                 return d
             elif pos in portals_map:
-                pos = portals_map[pos]
-                if is_near(map['size'], pos, next):
+                if my_g['portal_meta'].get((my_head, next)) == pos:
+                    logging.info('go portal %s' %str(pos))
                     return d
+                #pos = portals_map[pos]
+                #if is_near(map['size'], pos, next):
+                #    return d
         logging.error('fail to calculate dir')
     else:
         logging.warn("no way to go")
@@ -315,7 +337,7 @@ def make_decision(map, info, seq):
 class Agent(Fnake):
 
     name = 'fnake-%d' % random.randint(0, 9999)
-    type = 'ruby'
+    type = 'python'
     #name = 'fnake'
 
     def make_decision(self):
