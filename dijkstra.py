@@ -86,6 +86,24 @@ def shortestPath(G,start,end):
         end = P[end]
     Path.reverse()
     return Path
+
+def shortestPathFromDP(D, P, start, end):
+    """
+    Find a single shortest path from the given start vertex
+    to the given end vertex.
+    The input is D, P
+    The output is a list of the vertices in order along
+    the shortest path.
+    """
+
+    Path = []
+    while 1:
+        Path.append(end)
+        if end == start: break
+        end = P[end]
+    Path.reverse()
+    return Path
+#
 ## end of http://code.activestate.com/recipes/119466/ }}}
 
 
