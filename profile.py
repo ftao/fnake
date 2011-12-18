@@ -22,7 +22,7 @@ def test(filename):
 #                snake['body'] = snake['body'][:1]
         #fake 
 #        data['info']['eggs'].append((16,4))
-        pprint.pprint(data['info']['snakes'])
+#        pprint.pprint(data['info']['snakes'])
         print data['info']['snakes'][seq]['body']
         d = make_decision(data['map'], data['info'], seq)
         print 'd is ', d

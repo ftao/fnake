@@ -186,16 +186,21 @@ def build_per_snake_graph(map, info, seq, g, portals_map):
 
 def next_move_access_area(g, map, snake):
     if not snake['alive'] or snake['sprint'] < 0:
-        return set()
-    area = set()
+        return  {}
+    area = {}
     head = snake['body'][0]
     for directon in range(0, 4):
         if abs(directon - snake['direction']) != 2:
             node = head
-            for _ in range(0, SPRINT_STEP):
+            for step in range(0, SPRINT_STEP):
                 node = point_add(map['size'], node, DIRECT[directon])
                 if node in g:
-                    area.add(node)
+                    if snake['sprint'] == 0 and step == 0:
+                        area[node] = 2
+                    elif snake['sprint'] >0:
+                        area[node] = 2
+                    else:
+                        area[node] = 1
     return area   
 
 def access_length(g, node, can_not_go=[]):
@@ -229,7 +234,7 @@ def make_decision(map, info, seq):
 
     g, nodes, portals_map = build_base_graph(map, info)
     snake_gs = {}
-    danger_zone = set()
+    danger_zone = {}
     for snake_seq,snake in enumerate(info['snakes']):
         if snake['alive']:
             snake_head = snake['body'][0]
@@ -243,8 +248,10 @@ def make_decision(map, info, seq):
                 'P' : P
             }
             if snake_seq != seq:
-                danger_zone = danger_zone.union(next_move_access_area(snake_g, map, snake))
+                for n,df in next_move_access_area(snake_g, map, snake).items():
+                    danger_zone[n] = danger_zone.get(n, 0) + df
     
+    print 'danger', danger_zone
     #all data is ready 
 
     me = info['snakes'][seq]
@@ -259,7 +266,7 @@ def make_decision(map, info, seq):
     for nextnode in my_g[my_head]:
         al = access_length(my_g, nextnode, [my_head])
         rank[nextnode] = {
-            'safe_next_move' : nextnode not in danger_zone,
+            'safe_next_move' : -danger_zone.get(nextnode, 0),
             'free_space' : al, 'safe' : al >= len(me['body']),
             'control_food' : 0, 'control_food_min_dis' : 999999,
             'access_food' : 0, 'access_food_min_dis' : 999999
@@ -305,8 +312,8 @@ def make_decision(map, info, seq):
     def key_func(choice):
         node, meta = choice
         key = None
-        if meta['safe_next_move'] and meta['safe']:
-            key =  (True, True, meta['control_food'] > 0, -meta['control_food_min_dis'], 
+        if meta['safe']:
+            key =  (meta['safe_next_move'], meta['safe'], meta['control_food'] > 0, -meta['control_food_min_dis'], 
                     meta['access_food'] > 0, -meta['access_food_min_dis'], meta['free_space'])
         else:
             key =  (meta['safe_next_move'], meta['safe'], meta['free_space'], 0, 0, 0, 0)
@@ -314,6 +321,8 @@ def make_decision(map, info, seq):
         meta['_key'] = key
         return key
 
+    for dir,row in rank.items():
+        print dir, row 
     if len(rank) > 0:
         go = max(rank.items(), key=key_func)
         next = go[0]
